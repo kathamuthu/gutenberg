@@ -2,8 +2,9 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useSelect } from '@wordpress/data';
-import { useState, useCallback } from '@wordpress/element';
+import { addQueryArgs } from '@wordpress/url';
+import { select, useSelect } from '@wordpress/data';
+import { useEffect, useState, useCallback } from '@wordpress/element';
 import {
 	Tooltip,
 	DropdownMenu,
@@ -19,6 +20,11 @@ import { Icon, home, plus } from '@wordpress/icons';
 import AddTemplate from '../add-template';
 import TemplatePreview from './template-preview';
 import ThemePreview from './theme-preview';
+
+/**
+ * Browser dependencies
+ */
+const { fetch } = window;
 
 function TemplateLabel( { template, homeId } ) {
 	return (
@@ -65,15 +71,40 @@ export default function TemplateSwitcher( {
 		setThemePreviewVisible( () => false );
 	};
 
-	const { currentTheme, templates, templateParts } = useSelect(
-		( select ) => {
-			const { getCurrentTheme, getEntityRecords } = select( 'core' );
+	const [ homeId, setHomeId ] = useState();
+	useEffect( () => {
+		const effect = async () => {
+			try {
+				const { success, data } = await fetch(
+					addQueryArgs( '/', { '_wp-find-template': true } )
+				).then( ( res ) => res.json() );
+				if ( success ) {
+					let newHomeId = data.ID;
+					if ( newHomeId === null ) {
+						const { getEntityRecords } = select( 'core' );
+						newHomeId = getEntityRecords(
+							'postType',
+							'wp_template',
+							{
+								resolved: true,
+								slug: data.post_name,
+							}
+						)[ 0 ].id;
+					}
+					setHomeId( newHomeId );
+				} else {
+					throw new Error();
+				}
+			} catch ( err ) {
+				setHomeId( null );
+			}
+		};
+		effect();
+	}, [] );
 
-			const homeId = getEntityRecords( 'postType', 'wp_template', {
-				resolved: true,
-				slug: 'front-page',
-				theme: getCurrentTheme()?.stylesheet,
-			} )?.[ 0 ].id;
+	const { currentTheme, templates, templateParts } = useSelect(
+		( _select ) => {
+			const { getCurrentTheme, getEntityRecords } = _select( 'core' );
 
 			return {
 				currentTheme: getCurrentTheme(),
